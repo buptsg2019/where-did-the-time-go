@@ -27,6 +27,21 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Generate icons
+        run: |
+          # 创建所需的所有图标文件
+          New-Item -ItemType Directory -Force -Path "src-tauri/icons"
+          
+          # 下载标准 Tauri 图标
+          Invoke-WebRequest -Uri "https://raw.githubusercontent.com/tauri-apps/tauri/dev/examples/api/src-tauri/icons/icon.ico" -OutFile "src-tauri/icons/icon.ico"
+          Invoke-WebRequest -Uri "https://raw.githubusercontent.com/tauri-apps/tauri/dev/examples/api/src-tauri/icons/icon.png" -OutFile "src-tauri/icons/icon.png"
+          Invoke-WebRequest -Uri "https://raw.githubusercontent.com/tauri-apps/tauri/dev/examples/api/src-tauri/icons/128x128.png" -OutFile "src-tauri/icons/128x128.png"
+          Invoke-WebRequest -Uri "https://raw.githubusercontent.com/tauri-apps/tauri/dev/examples/api/src-tauri/icons/128x128@2x.png" -OutFile "src-tauri/icons/128x128@2x.png"
+          Invoke-WebRequest -Uri "https://raw.githubusercontent.com/tauri-apps/tauri/dev/examples/api/src-tauri/icons/32x32.png" -OutFile "src-tauri/icons/32x32.png"
+          
+          # 列出图标目录确认
+          Get-ChildItem "src-tauri/icons"
+
       - name: Run tests
         run: npm run test:run
 
