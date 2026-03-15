@@ -50,6 +50,9 @@ jobs:
       - name: 设置 Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: 创建前端构建目录
+        run: mkdir -p dist && echo '<!DOCTYPE html><html><body>Test</body></html>' > dist/index.html
+
       - name: 运行 Rust 测试
         run: cargo test --verbose
         working-directory: ./src-tauri

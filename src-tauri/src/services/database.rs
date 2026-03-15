@@ -188,8 +188,11 @@ impl Database {
     pub fn create_project(&self, request: &CreateProjectRequest) -> AppResult<Project> {
         self.conn.execute(
             "INSERT INTO projects (name, description, color) VALUES (?1, ?2, ?3)",
-            [&request.name, &request.description.as_ref().map(|s| s.as_str()).unwrap_or(""), 
-             &request.color.as_ref().map(|s| s.as_str()).unwrap_or("")],
+            rusqlite::params![
+                &request.name, 
+                request.description.as_deref().unwrap_or(""), 
+                request.color.as_deref().unwrap_or("")
+            ],
         )?;
         
         let id = self.conn.last_insert_rowid();

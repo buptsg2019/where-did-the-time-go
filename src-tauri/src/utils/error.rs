@@ -23,6 +23,12 @@ pub enum AppError {
 
 pub type AppResult<T> = Result<T, AppError>;
 
+impl From<AppError> for tauri::ipc::InvokeError {
+    fn from(error: AppError) -> Self {
+        tauri::ipc::InvokeError::from(error.to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -59,7 +65,9 @@ mod tests {
 
     #[test]
     fn test_serialization_error() {
-        let json_err = serde_json::Error::custom("解析失败");
+        // Create a serde_json::Error by parsing invalid JSON
+        let json_result: Result<serde_json::Value, _> = serde_json::from_str("invalid json");
+        let json_err = json_result.unwrap_err();
         let app_err: AppError = json_err.into();
 
         assert!(matches!(app_err, AppError::Serialization(_)));
@@ -86,4 +94,3 @@ mod tests {
         assert!(matches!(result.unwrap_err(), AppError::NotFound(_)));
     }
 }
-

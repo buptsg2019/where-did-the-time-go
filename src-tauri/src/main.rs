@@ -12,17 +12,15 @@ use commands::{
 };
 use services::database::Database;
 use std::sync::Mutex;
-use tauri::{Manager, WindowEvent};
+use tauri::{Emitter, Manager, WindowEvent};
 
 fn main() {
-    // Initialize database
-    let db_path = get_database_path();
-    let database = Database::new(db_path).expect("Failed to initialize database");
-    
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_autostart::init())
-        .manage(DbState(Mutex::new(database)))
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .invoke_handler(tauri::generate_handler![
             // Project commands
             project_commands::get_projects,
@@ -41,8 +39,19 @@ fn main() {
             water_commands::evaporate_water,
         ])
         .setup(|app| {
-            // Setup window event handlers
-            let window = app.get_webview_window("main").unwrap();
+            // Initialize database
+            let app_handle = app.handle();
+            let app_dir = app_handle
+                .path()
+                .app_data_dir()
+                .unwrap_or_else(|_| std::path::PathBuf::from("."));
+            
+            std::fs::create_dir_all(&app_dir).ok();
+            
+            let db_path = app_dir.join("where-did-the-time-go.db");
+            let database = Database::new(db_path).expect("Failed to initialize database");
+            
+            app.manage(DbState(Mutex::new(database)));
             
             // Set up water evaporation timer
             let app_handle = app.handle().clone();
@@ -64,10 +73,4 @@ fn main() {
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
-}
-
-fn get_database_path() -> std::path::PathBuf {
-    let app_dir = tauri::api::path::app_data_dir(&tauri::Config::default())
-        .unwrap_or_else(|| std::path::PathBuf::from("."));
-    app_dir.join("where-did-the-time-go.db")
 }
