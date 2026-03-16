@@ -4,13 +4,17 @@ import { useTimerStore } from "../stores/timerStore";
 import { useProjectStore } from "../stores/projectStore";
 import { useWaterStore } from "../stores/waterStore";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 // 悬浮球状态
-type BallState = "floating" | "expanded";
+type BallState = "floating" | "expanded" | "docked-left" | "docked-right" | "docked-top" | "docked-bottom";
 
 // 常量
 const BALL_SIZE = 80;
+const DOCKED_VISIBLE_SIZE = 16;
 const PANEL_WIDTH = 280;
+const PANEL_HEIGHT = 420;
+const DOCK_THRESHOLD = 30;
 
 function FloatingBall() {
   const [ballState, setBallState] = useState<BallState>("floating");
@@ -18,19 +22,28 @@ function FloatingBall() {
   const [newProjectName, setNewProjectName] = useState("");
   const [isDragging, setIsDragging] = useState(false);
   const [position, setPosition] = useState({ x: 50, y: 50 });
+  const [isHoveringDocked, setIsHoveringDocked] = useState(false);
   
   const { currentTimer, elapsed, startTimer, stopTimer, fetchCurrentTimer, updateElapsed } = useTimerStore();
   const { projects, fetchProjects, createProject } = useProjectStore();
   const { waterLevel, fetchWaterState, drinkWater } = useWaterStore();
   
   const dragStartRef = useRef({ x: 0, y: 0 });
-  const containerRef = useRef<HTMLDivElement>(null);
+  const screenSizeRef = useRef({ width: window.innerWidth, height: window.innerHeight });
 
   // 初始化
   useEffect(() => {
     fetchCurrentTimer();
     fetchProjects();
     fetchWaterState();
+    
+    // 获取窗口大小作为屏幕大小
+    const updateScreenSize = async () => {
+      const window = getCurrentWindow();
+      const size = await window.innerSize();
+      screenSizeRef.current = { width: size.width, height: size.height };
+    };
+    updateScreenSize();
     
     const evapInterval = setInterval(() => {
       handleEvaporation();
@@ -58,16 +71,25 @@ function FloatingBall() {
     }
   };
 
+  // 检测边缘吸附
+  const checkDocking = (x: number, y: number): BallState | null => {
+    const { width: screenW, height: screenH } = screenSizeRef.current;
+    
+    if (x <= DOCK_THRESHOLD) return "docked-left";
+    if (x >= screenW - BALL_SIZE - DOCK_THRESHOLD) return "docked-right";
+    if (y <= DOCK_THRESHOLD) return "docked-top";
+    if (y >= screenH - BALL_SIZE - DOCK_THRESHOLD) return "docked-bottom";
+    
+    return null;
+  };
+
   // 鼠标按下开始拖拽
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (ballState === "expanded") return;
     
-    e.preventDefault();
+    e.stopPropagation();
     setIsDragging(true);
-    dragStartRef.current = { 
-      x: e.clientX - position.x, 
-      y: e.clientY - position.y 
-    };
+    dragStartRef.current = { x: e.clientX - position.x, y: e.clientY - position.y };
   }, [ballState, position]);
 
   // 鼠标移动
@@ -79,17 +101,45 @@ function FloatingBall() {
       const newY = e.clientY - dragStartRef.current.y;
       
       // 限制在屏幕内
-      const maxX = window.innerWidth - BALL_SIZE;
-      const maxY = window.innerHeight - BALL_SIZE;
+      const { width: screenW, height: screenH } = screenSizeRef.current;
+      const clampedX = Math.max(0, Math.min(newX, screenW - BALL_SIZE));
+      const clampedY = Math.max(0, Math.min(newY, screenH - BALL_SIZE));
       
-      setPosition({
-        x: Math.max(0, Math.min(newX, maxX)),
-        y: Math.max(0, Math.min(newY, maxY))
-      });
+      setPosition({ x: clampedX, y: clampedY });
     };
     
-    const handleMouseUp = () => {
+    const handleMouseUp = (e: MouseEvent) => {
       setIsDragging(false);
+      
+      // 检测是否需要吸附
+      const finalX = e.clientX - dragStartRef.current.x;
+      const finalY = e.clientY - dragStartRef.current.y;
+      const dockState = checkDocking(finalX, finalY);
+      
+      if (dockState) {
+        setBallState(dockState);
+        // 吸附到边缘
+        const { width: screenW, height: screenH } = screenSizeRef.current;
+        let newX = finalX;
+        let newY = finalY;
+        
+        switch (dockState) {
+          case "docked-left":
+            newX = -BALL_SIZE + DOCKED_VISIBLE_SIZE;
+            break;
+          case "docked-right":
+            newX = screenW - DOCKED_VISIBLE_SIZE;
+            break;
+          case "docked-top":
+            newY = -BALL_SIZE + DOCKED_VISIBLE_SIZE;
+            break;
+          case "docked-bottom":
+            newY = screenH - DOCKED_VISIBLE_SIZE;
+            break;
+        }
+        
+        setPosition({ x: newX, y: newY });
+      }
     };
     
     window.addEventListener("mousemove", handleMouseMove);
@@ -106,12 +156,43 @@ function FloatingBall() {
     if (isDragging) return;
     e.stopPropagation();
     
-    if (ballState === "expanded") {
+    if (ballState.startsWith("docked")) {
+      // 从吸附状态展开
+      setBallState("expanded");
+      // 弹出到屏幕内
+      const { width: screenW, height: screenH } = screenSizeRef.current;
+      let newX = position.x;
+      let newY = position.y;
+      
+      switch (ballState) {
+        case "docked-left":
+          newX = DOCK_THRESHOLD;
+          break;
+        case "docked-right":
+          newX = screenW - BALL_SIZE - PANEL_WIDTH - 30;
+          break;
+        case "docked-top":
+          newY = DOCK_THRESHOLD;
+          break;
+        case "docked-bottom":
+          newY = screenH - PANEL_HEIGHT - 30;
+          break;
+      }
+      
+      setPosition({ x: newX, y: newY });
+    } else if (ballState === "expanded") {
       setBallState("floating");
       setShowProjectModal(false);
     } else {
       setBallState("expanded");
     }
+  };
+
+  // 关闭面板
+  const handleClose = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setBallState("floating");
+    setShowProjectModal(false);
   };
 
   // 格式化时间
@@ -148,13 +229,6 @@ function FloatingBall() {
     await drinkWater(0.2);
   };
 
-  // 关闭面板
-  const handleClose = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setBallState("floating");
-    setShowProjectModal(false);
-  };
-
   // 水波动画
   const waveVariants = {
     animate: {
@@ -165,32 +239,94 @@ function FloatingBall() {
     },
   };
 
+  // 吸附状态下的悬停效果
+  const handleDockedMouseEnter = () => {
+    if (!ballState.startsWith("docked")) return;
+    setIsHoveringDocked(true);
+  };
+
+  const handleDockedMouseLeave = () => {
+    if (!ballState.startsWith("docked")) return;
+    setIsHoveringDocked(false);
+  };
+
+  // 获取吸附状态的样式
+  const isDocked = ballState.startsWith("docked");
+  
+  const getDockedStyle = () => {
+    if (!isDocked) return {};
+    switch (ballState) {
+      case "docked-left":
+        return { clipPath: "inset(0 0 0 80%)" };
+      case "docked-right":
+        return { clipPath: "inset(0 80% 0 0)" };
+      case "docked-top":
+        return { clipPath: "inset(80% 0 0 0)" };
+      case "docked-bottom":
+        return { clipPath: "inset(0 0 80% 0)" };
+      default:
+        return {};
+    }
+  };
+
+  // 计算面板位置（防止超出屏幕）
+  const getPanelPosition = () => {
+    const { width: screenW, height: screenH } = screenSizeRef.current;
+    let left = position.x + BALL_SIZE + 10;
+    let top = position.y;
+    
+    // 如果右侧空间不够，显示在左侧
+    if (left + PANEL_WIDTH > screenW) {
+      left = position.x - PANEL_WIDTH - 10;
+    }
+    
+    // 如果底部空间不够，向上调整
+    if (top + PANEL_HEIGHT > screenH) {
+      top = screenH - PANEL_HEIGHT - 10;
+    }
+    
+    return { left, top };
+  };
+
+  const panelPos = getPanelPosition();
+
   return (
     <div 
-      ref={containerRef}
-      className="fixed inset-0 pointer-events-none overflow-visible"
+      className="fixed inset-0 w-full h-full"
       style={{ 
         background: "transparent",
+        pointerEvents: "none",
       }}
     >
       {/* 悬浮球 */}
       <motion.div
-        className="absolute pointer-events-auto"
+        className="absolute"
         style={{
           left: position.x,
           top: position.y,
           width: BALL_SIZE,
           height: BALL_SIZE,
-          cursor: ballState === "expanded" ? "default" : isDragging ? "grabbing" : "grab",
-          zIndex: 9999,
+          pointerEvents: "auto",
+          cursor: ballState === "expanded" ? "pointer" : isDragging ? "grabbing" : "grab",
+          zIndex: 100,
+          ...getDockedStyle(),
         }}
+        onMouseEnter={handleDockedMouseEnter}
+        onMouseLeave={handleDockedMouseLeave}
         onMouseDown={handleMouseDown}
+        onClick={handleBallClick}
+        animate={{ 
+          x: isHoveringDocked && ballState === "docked-left" ? 8 : 
+             isHoveringDocked && ballState === "docked-right" ? -8 : 0,
+          y: isHoveringDocked && ballState === "docked-top" ? 8 : 
+             isHoveringDocked && ballState === "docked-bottom" ? -8 : 0,
+        }}
+        transition={{ duration: 0.2 }}
       >
         <motion.div
           className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 shadow-lg flex items-center justify-center overflow-hidden relative"
-          onClick={handleBallClick}
-          whileHover={ballState !== "expanded" ? { scale: 1.05 } : {}}
-          whileTap={ballState !== "expanded" ? { scale: 0.95 } : {}}
+          whileHover={!isDocked ? { scale: 1.05 } : {}}
+          whileTap={!isDocked ? { scale: 0.95 } : {}}
           animate={{ scale: isDragging ? 1.1 : 1 }}
         >
           {/* 水波背景 */}
@@ -222,20 +358,22 @@ function FloatingBall() {
         </motion.div>
 
         {/* 水位提示 */}
-        <motion.div
-          className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-xs whitespace-nowrap pointer-events-none"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-        >
-          <span className={`font-medium ${waterLevel < 0.3 ? 'text-red-500' : 'text-blue-500'}`}>
-            {Math.round(waterLevel * 100)}%
-          </span>
-        </motion.div>
+        {!isDocked && (
+          <motion.div
+            className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-xs whitespace-nowrap"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+          >
+            <span className={`font-medium ${waterLevel < 0.3 ? 'text-red-500' : 'text-blue-500'}`}>
+              {Math.round(waterLevel * 100)}%
+            </span>
+          </motion.div>
+        )}
 
         {/* 计时器显示 */}
-        {currentTimer && (
+        {currentTimer && !isDocked && (
           <motion.div
-            className="absolute -top-8 left-1/2 -translate-x-1/2 bg-white/95 dark:bg-gray-800/95 backdrop-blur-sm px-2 py-1 rounded text-xs whitespace-nowrap border border-gray-200 dark:border-gray-700 shadow-sm pointer-events-none"
+            className="absolute -top-8 left-1/2 -translate-x-1/2 bg-white/95 dark:bg-gray-800/95 backdrop-blur-sm px-2 py-1 rounded text-xs whitespace-nowrap border border-gray-200 dark:border-gray-700 shadow-sm"
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
           >
@@ -248,16 +386,17 @@ function FloatingBall() {
       <AnimatePresence>
         {ballState === "expanded" && (
           <motion.div
-            className="absolute pointer-events-auto bg-white/98 dark:bg-gray-900/98 backdrop-blur-md border border-gray-200 dark:border-gray-700 rounded-xl shadow-2xl p-4"
+            className="absolute bg-white/98 dark:bg-gray-900/98 backdrop-blur-md border border-gray-200 dark:border-gray-700 rounded-xl shadow-2xl p-4"
             style={{
-              left: position.x + BALL_SIZE + 10,
-              top: position.y,
+              left: panelPos.left,
+              top: panelPos.top,
               width: PANEL_WIDTH,
-              zIndex: 9998,
+              pointerEvents: "auto",
+              zIndex: 99,
             }}
-            initial={{ opacity: 0, x: -20, scale: 0.9 }}
-            animate={{ opacity: 1, x: 0, scale: 1 }}
-            exit={{ opacity: 0, x: -20, scale: 0.9 }}
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
             transition={{ duration: 0.2 }}
             onClick={(e) => e.stopPropagation()}
           >

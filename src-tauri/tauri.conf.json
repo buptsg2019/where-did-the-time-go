@@ -13,12 +13,10 @@
       {
         "label": "main",
         "title": "时间去哪了",
-        "width": 80,
-        "height": 80,
-        "minWidth": 80,
-        "minHeight": 80,
-        "maxWidth": 400,
-        "maxHeight": 500,
+        "width": 1920,
+        "height": 1080,
+        "minWidth": 800,
+        "minHeight": 600,
         "resizable": false,
         "fullscreen": false,
         "decorations": false,
@@ -27,9 +25,8 @@
         "visible": true,
         "transparent": true,
         "center": false,
-        "x": 50,
-        "y": 50,
-        "focus": false,
+        "x": 0,
+        "y": 0,
         "shadow": false
       }
     ],
