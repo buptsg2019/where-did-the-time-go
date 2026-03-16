@@ -36,13 +36,16 @@ function FloatingBall() {
     const init = async () => {
       windowRef.current = getCurrentWindow();
       
-      // 获取屏幕尺寸
-      const monitors = await windowRef.current.availableMonitors();
-      if (monitors.length > 0) {
+      // 获取当前显示器尺寸
+      try {
+        const size = await windowRef.current.innerSize();
+        // 估计屏幕尺寸（窗口初始位置在屏幕内）
         screenSizeRef.current = {
-          width: monitors[0].size.width,
-          height: monitors[0].size.height
+          width: Math.max(1920, size.width + 100),
+          height: Math.max(1080, size.height + 100)
         };
+      } catch (e) {
+        // 使用默认值
       }
       
       // 设置初始窗口大小
@@ -227,10 +230,7 @@ function FloatingBall() {
     await windowRef.current?.hide();
   };
 
-  // 退出应用
-  const handleQuit = async () => {
-    await invoke("quit_app");
-  };
+
 
   // 格式化时间
   const formatTime = (seconds: number) => {
