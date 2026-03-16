@@ -2,7 +2,10 @@ import FloatingBall from "./components/FloatingBall";
 
 function App() {
   return (
-    <div className="w-full h-full bg-transparent overflow-hidden">
+    <div 
+      className="fixed inset-0 w-screen h-screen overflow-hidden"
+      style={{ background: "transparent" }}
+    >
       <FloatingBall />
     </div>
   );

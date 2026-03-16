@@ -65,7 +65,7 @@ fn main() {
             let _tray = TrayIconBuilder::new()
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&menu)
-                .show_menu_on_left_click(false)
+                .show_menu_on_left_click(true)
                 .on_menu_event(|app: &AppHandle, event| {
                     match event.id.as_ref() {
                         "show" => {
@@ -80,21 +80,13 @@ fn main() {
                         _ => {}
                     }
                 })
-                .on_tray_icon_event(|tray, _event| {
-                    // Left click to show window
-                    let app = tray.app_handle();
-                    if let Some(window) = app.get_webview_window("main") {
-                        let _ = window.show();
-                        let _ = window.set_focus();
-                    }
-                })
                 .build(app)?;
             
             // Set up water evaporation timer
             let app_handle = app.handle().clone();
             std::thread::spawn(move || {
                 loop {
-                    std::thread::sleep(std::time::Duration::from_secs(60)); // Every minute
+                    std::thread::sleep(std::time::Duration::from_secs(60));
                     let _ = app_handle.emit("water_evaporation", ());
                 }
             });
@@ -104,13 +96,8 @@ fn main() {
         .on_window_event(|window, event| {
             match event {
                 WindowEvent::CloseRequested { api, .. } => {
-                    // Hide window instead of closing
                     window.hide().unwrap();
                     api.prevent_close();
-                }
-                WindowEvent::Focused(focused) => {
-                    // Emit focus event to frontend
-                    let _ = window.emit("window_focused", *focused);
                 }
                 _ => {}
             }
