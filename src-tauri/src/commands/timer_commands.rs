@@ -1,7 +1,6 @@
 use crate::commands::project_commands::DbState;
 use crate::models::time_record::TimeRecord;
 use crate::utils::error::AppResult;
-use std::sync::Mutex;
 use tauri::State;
 
 #[tauri::command]

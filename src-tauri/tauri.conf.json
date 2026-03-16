@@ -11,9 +11,14 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "时间去哪了",
-        "width": 400,
-        "height": 400,
+        "width": 80,
+        "height": 80,
+        "minWidth": 80,
+        "minHeight": 80,
+        "maxWidth": 400,
+        "maxHeight": 500,
         "resizable": false,
         "fullscreen": false,
         "decorations": false,
@@ -23,7 +28,8 @@
         "transparent": true,
         "center": false,
         "x": 50,
-        "y": 50
+        "y": 50,
+        "focus": false
       }
     ],
     "security": {

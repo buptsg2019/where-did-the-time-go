@@ -1,4 +1,4 @@
-use rusqlite::{Connection, Result as SqliteResult, Row};
+use rusqlite::Connection;
 use crate::utils::error::{AppError, AppResult};
 use crate::models::project::{Project, CreateProjectRequest, UpdateProjectRequest};
 use crate::models::time_record::TimeRecord;

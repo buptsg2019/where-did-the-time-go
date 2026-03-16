@@ -12,7 +12,11 @@ use commands::{
 };
 use services::database::Database;
 use std::sync::Mutex;
-use tauri::{Emitter, Manager, WindowEvent};
+use tauri::{
+    menu::{Menu, MenuItem},
+    tray::TrayIconBuilder,
+    Emitter, Manager, WindowEvent, AppHandle,
+};
 
 fn main() {
     tauri::Builder::default()
@@ -53,6 +57,37 @@ fn main() {
             
             app.manage(DbState(Mutex::new(database)));
             
+            // Setup system tray
+            let show_i = MenuItem::with_id(app, "show", "显示", true, None::<&str>)?;
+            let quit_i = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&show_i, &quit_i])?;
+            
+            let _tray = TrayIconBuilder::new()
+                .icon(app.default_window_icon().unwrap().clone())
+                .menu(&menu)
+                .show_menu_on_left_click(false)
+                .on_menu_event(|app: &AppHandle, event| match event.id.as_ref() {
+                    "show" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    }
+                    "quit" => {
+                        app.exit(0);
+                    }
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    // Left click to show window
+                    let app = tray.app_handle();
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.show();
+                        let _ = window.set_focus();
+                    }
+                })
+                .build(app)?;
+            
             // Set up water evaporation timer
             let app_handle = app.handle().clone();
             std::thread::spawn(move || {
@@ -65,10 +100,17 @@ fn main() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            if let WindowEvent::CloseRequested { api, .. } = event {
-                // Hide window instead of closing
-                window.hide().unwrap();
-                api.prevent_close();
+            match event {
+                WindowEvent::CloseRequested { api, .. } => {
+                    // Hide window instead of closing
+                    window.hide().unwrap();
+                    api.prevent_close();
+                }
+                WindowEvent::Focused(focused) => {
+                    // Emit focus event to frontend
+                    let _ = window.emit("window_focused", *focused);
+                }
+                _ => {}
             }
         })
         .run(tauri::generate_context!())

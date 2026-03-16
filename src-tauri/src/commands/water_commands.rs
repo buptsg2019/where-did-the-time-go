@@ -1,7 +1,6 @@
 use crate::commands::project_commands::DbState;
 use crate::utils::error::AppResult;
 use serde::{Deserialize, Serialize};
-use std::sync::Mutex;
 use tauri::State;
 
 #[derive(Serialize, Deserialize)]
